@@ -38,8 +38,8 @@ pipeline {
                 script {
                     try {
                         echo "🛠️ Running CI/CD pipeline..."
-                        sh 'exit 1'  // ❌ Simulates a build failure
-//                        sh 'echo "Build succeeded!"'  // Replace with your real build & deploy steps
+//                        sh 'exit 1'  // ❌ Simulates a build failure
+                        sh 'echo "Build succeeded!"'  // Replace with your real build & deploy steps
                         transitionJira('Done')
                     } catch (err) {
                         transitionJira('Blocked')
