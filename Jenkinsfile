@@ -11,23 +11,23 @@ pipeline {
         stage('Check Jira Status') {
             steps {
                 script {
-                    JIRA_KEY = sh(script: "git log -1 --pretty=%B | grep -o 'KAN-[0-9]\\+'", returnStdout: true).trim()
-                    if (!JIRA_KEY) {
-                        error("❌ No Jira issue key found in commit.")
+                    env.JIRA_KEY = sh(script: "git log -1 --pretty=%B | grep -o 'KAN-[0-9]\\+'", returnStdout: true).trim()
+                    if (!env.JIRA_KEY) {
+                        error("❌ No Jira issue key found in commit message.")
                     }
-                    echo "🎯 Jira Key: ${JIRA_KEY}"
+                    echo "🎯 Jira Key: ${env.JIRA_KEY}"
 
                     def response = sh(script: """
                         curl -s -u ${JIRA_USER}:${JIRA_API_TOKEN} \\
-                        -X GET "${JIRA_BASE_URL}/rest/api/3/issue/${JIRA_KEY}" \\
+                        -X GET "${JIRA_BASE_URL}/rest/api/3/issue/${env.JIRA_KEY}" \\
                         -H "Accept: application/json"
                     """, returnStdout: true)
 
-                    JIRA_STATUS = sh(script: "echo '${response}' | jq -r '.fields.status.name'", returnStdout: true).trim()
-                    echo "📌 Jira Status: ${JIRA_STATUS}"
+                    env.JIRA_STATUS = sh(script: "echo '${response}' | jq -r '.fields.status.name'", returnStdout: true).trim()
+                    echo "📌 Jira Status: ${env.JIRA_STATUS}"
 
-                    if (JIRA_STATUS != "IN PROGRESS") {
-                        error("🚫 Jira issue not in 'IN PROGRESS'. Found: ${JIRA_STATUS}")
+                    if (env.JIRA_STATUS.toLowerCase() != "in progress") {
+                        error("🚫 Jira issue is not in 'In Progress'. Found: ${env.JIRA_STATUS}")
                     }
                 }
             }
@@ -37,7 +37,7 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "🛠️ Running CI/CD pipeline..."
+                        echo "🛠️ Running CI/CD pipeline steps..."
                         sh 'echo "Build succeeded!"'
                         transitionJira('Done')
                     } catch (err) {
@@ -52,23 +52,23 @@ pipeline {
 
 def transitionJira(String toState) {
     def transitionsJson = sh(script: """
-        curl -s -u ${JIRA_USER}:${JIRA_API_TOKEN} \\
-        -X GET "${JIRA_BASE_URL}/rest/api/3/issue/${JIRA_KEY}/transitions" \\
+        curl -s -u ${env.JIRA_USER}:${env.JIRA_API_TOKEN} \\
+        -X GET "${env.JIRA_BASE_URL}/rest/api/3/issue/${env.JIRA_KEY}/transitions" \\
         -H "Accept: application/json"
     """, returnStdout: true)
 
-    def transitionId = sh(script: "echo '${transitionsJson}' | jq -r '.transitions[] | select(.name==\"${toState}\") | .id'", returnStdout: true).trim()
+    def transitionId = sh(script: "echo '${transitionsJson}' | jq -r '.transitions[] | select(.name | ascii_downcase == \"${toState.toLowerCase()}\") | .id'", returnStdout: true).trim()
 
     if (!transitionId) {
-        error("❌ No transition from '${JIRA_STATUS}' → '${toState}'")
+        error("❌ No valid transition from '${env.JIRA_STATUS}' → '${toState}' found.")
     }
 
     sh(script: """
-        curl -s -u ${JIRA_USER}:${JIRA_API_TOKEN} \\
-        -X POST "${JIRA_BASE_URL}/rest/api/3/issue/${JIRA_KEY}/transitions" \\
+        curl -s -u ${env.JIRA_USER}:${env.JIRA_API_TOKEN} \\
+        -X POST "${env.JIRA_BASE_URL}/rest/api/3/issue/${env.JIRA_KEY}/transitions" \\
         -H "Content-Type: application/json" \\
         --data '{"transition":{"id":"${transitionId}"}}'
     """)
-    echo "✅ Jira moved to: ${toState}"
+    echo "✅ Jira issue ${env.JIRA_KEY} transitioned to: ${toState}"
 }
 
